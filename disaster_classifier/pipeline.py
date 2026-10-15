@@ -2,10 +2,13 @@ from collections import Counter
 import csv
 from datetime import datetime
 import math
+import os
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 
 EARTH_RADIUS_KM = 6371.0088
+_DEFAULT_CSV = Path(__file__).resolve().parents[1] / "all_disasters_10_years.csv"
 
 
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -23,8 +26,9 @@ def load_eonet_dataset(
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Load and validate NASA EONET environmental disaster records from CSV."""
+    resolved_path = csv_path if os.path.exists(csv_path) else str(_DEFAULT_CSV)
     records: List[Dict[str, Any]] = []
-    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
+    with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
@@ -138,9 +142,9 @@ class InverseFrequencyKNNClassifier:
         }
         return self
 
-    def predict(self, X: np.ndarray) -> List[str]:
+    def predict_proba(self, X: np.ndarray) -> List[Dict[str, float]]:
         if self.X_train is None or self.mean is None or self.std is None:
-            raise RuntimeError("Classifier must be fitted before calling predict")
+            raise RuntimeError("Classifier must be fitted before calling predict_proba")
         X_arr = np.asarray(X, dtype=np.float64)
         if X_arr.ndim == 1:
             X_arr = X_arr.reshape(1, -1)
@@ -149,20 +153,30 @@ class InverseFrequencyKNNClassifier:
 
         X_norm = (X_arr - self.mean) / self.std
         k_eff = min(self.k, self.X_train.shape[0])
-        preds: List[str] = []
+        probas: List[Dict[str, float]] = []
 
         for row in X_norm:
             dists = np.linalg.norm(self.X_train - row, axis=1)
             nearest_idx = np.argsort(dists)[:k_eff]
-            scores: Dict[str, float] = {}
+            scores: Dict[str, float] = {cls: 0.0 for cls in self.class_weights}
             for idx in nearest_idx:
                 cls = self.y_train[int(idx)]
                 inv_dist = 1.0 / (float(dists[int(idx)]) + self.eps)
                 weight = inv_dist * self.class_weights.get(cls, 1.0)
                 scores[cls] = scores.get(cls, 0.0) + weight
-            best_cls = max(scores.items(), key=lambda kv: (kv[1], kv[0]))[0]
-            preds.append(best_cls)
-        return preds
+            total_s = sum(scores.values())
+            if total_s > 0:
+                probas.append({cls: round(val / total_s, 6) for cls, val in scores.items()})
+            else:
+                probas.append(scores)
+        return probas
+
+    def predict(self, X: np.ndarray) -> List[str]:
+        probas = self.predict_proba(X)
+        return [
+            max(p.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            for p in probas
+        ]
 
 
 def evaluate_macro_f1(y_true: Sequence[str], y_pred: Sequence[str]) -> Dict[str, float]:
