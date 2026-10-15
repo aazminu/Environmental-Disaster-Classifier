@@ -40,12 +40,15 @@ def test_inverse_frequency_knn_handles_imbalance():
     X, y = extract_spatiotemporal_features(records)
     clf = InverseFrequencyKNNClassifier(k=3).fit(X, y)
     preds = clf.predict(X)
+    probas = clf.predict_proba(X)
+    assert len(probas) == len(records)
+    assert all(abs(sum(p.values()) - 1.0) < 1e-5 for p in probas)
     metrics = evaluate_macro_f1(y, preds)
     assert metrics["macro_f1"] >= 0.95
 
 
 def test_load_eonet_dataset_and_classify_real_subset():
-    records = load_eonet_dataset("all_disasters_10_years.csv", limit=250)
+    records = load_eonet_dataset(limit=250)
     assert len(records) == 250
     X, y = extract_spatiotemporal_features(records)
     assert X.shape == (250, 7)
@@ -54,3 +57,4 @@ def test_load_eonet_dataset_and_classify_real_subset():
     assert len(preds) == 50
     metrics = evaluate_macro_f1(y[200:], preds)
     assert 0.0 <= metrics["accuracy"] <= 1.0
+
