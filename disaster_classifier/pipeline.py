@@ -206,3 +206,23 @@ def evaluate_macro_f1(y_true: Sequence[str], y_pred: Sequence[str]) -> Dict[str,
         "macro_recall": round(float(np.mean(recalls)), 6),
         "macro_f1": round(float(np.mean(f1s)), 6),
     }
+
+def compute_class_balance_entropy(labels: Sequence[str]) -> Dict[str, Any]:
+    """Compute class frequency distribution, max/min imbalance ratio, and normalized entropy."""
+    if not labels:
+        return {"total_samples": 0, "num_classes": 0, "imbalance_ratio": 1.0, "normalized_entropy": 0.0}
+    counts: Dict[str, int] = {}
+    for lbl in labels:
+        counts[str(lbl)] = counts.get(str(lbl), 0) + 1
+    total = len(labels)
+    k = len(counts)
+    max_c = max(counts.values())
+    min_c = max(1, min(counts.values()))
+    entropy = -sum((c / total) * math.log2(c / total) for c in counts.values() if c > 0)
+    norm_entropy = entropy / math.log2(k) if k > 1 else 1.0
+    return {
+        "total_samples": total,
+        "num_classes": k,
+        "imbalance_ratio": round(max_c / min_c, 4),
+        "normalized_entropy": round(norm_entropy, 6),
+    }
