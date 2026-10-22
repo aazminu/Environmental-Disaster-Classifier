@@ -58,3 +58,12 @@ def test_load_eonet_dataset_and_classify_real_subset():
     metrics = evaluate_macro_f1(y[200:], preds)
     assert 0.0 <= metrics["accuracy"] <= 1.0
 
+from disaster_classifier.pipeline import compute_class_balance_entropy
+
+
+def test_compute_class_balance_entropy():
+    stats = compute_class_balance_entropy(["Wildfires", "Wildfires", "Severe Storms", "Floods"])
+    assert stats["total_samples"] == 4
+    assert stats["num_classes"] == 3
+    assert stats["imbalance_ratio"] == 2.0
+    assert 0.8 < stats["normalized_entropy"] <= 1.0
